@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <title>Coursework Robot</title>
+        <link rel="shortcut icon" href="../favicon.ico">
+        <script type="text/javascript" src="../libs/three.js"></script>
+        <script type="text/javascript" src="../libs/jquery.js"></script>
+        <script type="text/javascript" src="../libs/stats.js"></script>
+        <script type="text/javascript" src="../libs/dat.gui.js"></script>
+        <script type="text/javascript" src="../libs/physi.js"></script>
+        <script type="text/javascript" src="../libs/keypress.js"></script>
+        <script src="js/controls/FlyControls.js"></script>
+        <style>
+            body{
+                /* set margin to 0 and overflow to hidden, to go fullscreen */
+                margin: 0;
+                overflow: hidden;
+            }
+        </style>
+    </head>
+    <body>
+
+        <div id="Stats-output">
+        </div>
+        <!-- Div which will hold the Output -->
+        <div id="WebGL-output">
+        </div>
+
+
+        <!-- Javascript code that runs our Three.js examples -->
+        <script type="text/javascript">
+
+            // once everything is loaded, we run our Three.js stuff.
+            $(function () {
+
+                Physijs.scripts.worker = '../libs/physijs_worker.js';
+                Physijs.scripts.ammo = '../libs/ammo.js';
+
+                var stats = initStats();
+
+                // create a physics scene, that will hold all our elements such as objects, cameras and lights.
+                var scene = new Physijs.Scene();
+                
+                //setting the gravity of the scene
+                var gravityY = -10;
+                scene.setGravity(new THREE.Vector3(0, gravityY, 0));
+
+                // create a camera, which defines where we're looking at.
+                var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+                // create a render and set the size
+                var renderer = new THREE.WebGLRenderer();
+
+                renderer.setClearColor(0xEEEEEE, 1.0);
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.shadowMap.enabled = true;
+
+                //texture loading
+                var texture = new THREE.TextureLoader();
+                var tyreTexture = texture.load("../assets/tyre.jpg");
+                var tyreBumpMap = texture.load("../assets/tyre-bump.jpg");
+                var backwallTexture = texture.load("../assets/stone.jpg");
+                var backwallBumpMap = texture.load("../assets/stone-bump.jpg");
+                var floorTexture = texture.load("../assets/floor.jpg");
+                var floorBumpMap = texture.load("../assets/floor-bump.jpg");
+
+                // create the walls with materials
+                var planeMaterial = new THREE.MeshLambertMaterial({color: 0xffffff});
+
+                var backwallMaterial = new THREE.MeshPhongMaterial();
+                backwallMaterial.map = backwallTexture;
+                backwallMaterial.bumpMap = backwallBumpMap;
+                backwallMaterial.bumpScale = 1;
+
+                var backWall = new Physijs.BoxMesh(new THREE.PlaneGeometry(130, 30, 1, 1), backwallMaterial);
+                backWall.receiveShadow = true;
+
+                // rotate and position the wall
+                backWall.position.set(0, 5, -50);
+                backWall.scale.y = 1.9;
+                backWall.scale.x = 1.8;
+
+                // add the wall to the scene
+                scene.add(backWall);
+
+                var ceiling = new Physijs.BoxMesh(new THREE.PlaneGeometry(80, 20, 1, 1), planeMaterial);
+                ceiling.receiveShadow = true;
+
+                // rotate and position the ceiling
+                ceiling.rotation.x = 0.5 * Math.PI;
+                ceiling.position.set(0, 19, 0);
+                ceiling.scale.x = 1.5;
+
+                // add the ceiling to the scene
+                scene.add(ceiling);
+
+                var floorMaterial = new THREE.MeshPhongMaterial();
+                floorMaterial.map = floorTexture;
+                floorMaterial.bumpMap = floorBumpMap;
+                floorMaterial.bumpScale = 1;
+
+                var floor = new Physijs.BoxMesh(new THREE.PlaneGeometry(130, 100, 1, 1), floorMaterial);
+                floor.receiveShadow = true;
+
+                // rotate and position the ceiling
+                floor.rotation.x = -.5 * Math.PI;
+                floor.position.set(0, -19, 0);
+                floor.scale.x = 1.5;
+
+                // add the ceiling to the scene
+                scene.add(floor);
+
+                // position and point the camera to the center of the scene
+                camera.position.set(0, 0, 55);
+                camera.lookAt(scene.position);
+
+                // add ambient lighting
+                var ambientColor = "#000000";
+                var ambientLight = new THREE.AmbientLight(ambientColor);
+                scene.add(ambientLight);
+
+                // add 3 coloured pointlights above the scene
+                var pointlight1 = new THREE.PointLight(0xFF0000);
+                var pointlight2 = new THREE.PointLight(0x0000FF);
+                var pointlight3 = new THREE.PointLight(0x008000);
+
+                // add 3 coloured lightbulbs
+                var red = new THREE.MeshLambertMaterial({color: 0xFF0000});
+                var blue = new THREE.MeshLambertMaterial({color: 0x0000FF});
+                var green = new THREE.MeshLambertMaterial({color: 0x0aff02});
+
+                var colouredSphere = new THREE.SphereGeometry(1, 10, 10);
+
+                var light1 = new THREE.Mesh(colouredSphere, red);
+                var light2 = new THREE.Mesh(colouredSphere, blue);
+                var light3 = new THREE.Mesh(colouredSphere, green);
+
+                //set the position of the lights
+                pointlight1.position.set(-10, 17, 0);
+                pointlight2.position.set(0, 17, 0);
+                pointlight3.position.set(10, 17, 0);
+                light1.position.set(-10, 19, 0);
+                light2.position.set(0, 19, 0);
+                light3.position.set(10, 19, 0);
+
+                //create a group to contain the light objects
+                var lights = new THREE.Object3D();
+                lights.add(light1, light2, light3, pointlight1, pointlight2, pointlight3);
+
+                //add lights to the scene
+                scene.add(lights);
+
+                //creating object and material for the robots body with mass        
+                var cubeMaterial = new THREE.MeshLambertMaterial({color: 0x333333});
+                var bodyMaterial = new THREE.MeshPhongMaterial({color: 0xababab, specular: 0xe0e0e0});
+
+                var body = new Physijs.BoxMesh(new THREE.CylinderGeometry(1, 1, 19), bodyMaterial, 1);
+                body.castShadow = true;
+
+                //add robots head, ears and antenna
+                var head = new Physijs.BoxMesh(new THREE.CylinderGeometry(3, 3, 5, 20), bodyMaterial);
+                var ears = new Physijs.BoxMesh(new THREE.CylinderGeometry(.3, .3, 8), bodyMaterial);
+                var antenna = new Physijs.BoxMesh(new THREE.CylinderGeometry(.1, .1, 3), bodyMaterial);
+                ears.position.y = 11;
+                head.position.y = 10;
+                antenna.position.set(-1, 14, 0);
+                ears.rotation.z = 0.5 * Math.PI;
+                head.castShadow = true;
+
+                //add robots shoulders and arms
+                var armGeo = new THREE.CylinderGeometry(.5, .5, 10);
+                var rotorArmGeo = new THREE.CylinderGeometry(.5, .1, 1)
+
+                var rotorMaterial = new THREE.MeshLambertMaterial({color: 0x000000});
+
+                var shoulders = new Physijs.BoxMesh(new THREE.CylinderGeometry(.5, .5, 15), bodyMaterial);
+
+                var armRight = new Physijs.BoxMesh(armGeo, bodyMaterial);
+                var armLeft = new Physijs.BoxMesh(armGeo, bodyMaterial);
+
+                //add end of arms and rotor blades
+                var rotorArmL = new Physijs.BoxMesh(rotorArmGeo, bodyMaterial);
+                var rotorArmR = new Physijs.BoxMesh(rotorArmGeo, bodyMaterial);
+
+                var rotorRight1 = new Physijs.BoxMesh(new THREE.CubeGeometry(7, 0.01, 0.5), rotorMaterial);
+                var rotorRight2 = new Physijs.BoxMesh(new THREE.CubeGeometry(7, 0.01, 0.5), rotorMaterial);
+
+                var rotorLeft1 = new Physijs.BoxMesh(new THREE.CubeGeometry(7, 0.01, 0.5), rotorMaterial);
+                var rotorLeft2 = new Physijs.BoxMesh(new THREE.CubeGeometry(7, 0.01, 0.5), rotorMaterial);
+
+                rotorRight1.position.set(7.5, -5, 0);
+                rotorRight2.position.set(7.5, -5, 0);
+                rotorRight1.castShadow = true;
+                rotorRight2.castShadow = true;
+
+                rotorLeft1.position.set(-7.5, -5, 0);
+                rotorLeft2.position.set(-7.5, -5, 0);
+                rotorLeft1.castShadow = true;
+                rotorLeft2.castShadow = true;
+
+                rotorRight2.rotation.y = 0.5 * Math.PI;
+                rotorLeft2.rotation.y = 0.5 * Math.PI;
+
+                shoulders.position.set(0, 5.8, 0);
+                shoulders.rotation.z = Math.PI / 2;
+                shoulders.castShadow = true;
+
+                armRight.position.set(7.5, 1, 0);
+                armLeft.position.set(-7.5, 1, 0);
+                armRight.castShadow = true;
+                armLeft.castShadow = true;
+
+                rotorArmR.position.set(7.5, -4.5, 0);
+                rotorArmL.position.set(-7.5, -4.5, 0);
+                armRight.castShadow = true;
+                armLeft.castShadow = true;
+
+                //add the robots wheels with a wheel texture
+                var wheelMaterial = new THREE.MeshPhongMaterial();
+                wheelMaterial.map = tyreTexture;
+                wheelMaterial.bumpMap = tyreBumpMap;
+                wheelMaterial.bumpScale = 1;
+                wheelMaterial.map.wrapS = THREE.RepeatWrapping;
+                wheelMaterial.map.wrapT = THREE.RepeatWrapping;
+
+                var wheels = new THREE.CylinderGeometry(3, 3, 4, 30);
+
+                var wheelLeft = new Physijs.CylinderMesh(wheels, wheelMaterial);
+                var wheelRight = new Physijs.CylinderMesh(wheels, wheelMaterial);
+
+                wheelLeft.castShadow = true;
+                wheelRight.castShadow = true;
+
+                //creating an axel to attach the wheels
+                var axle = new Physijs.BoxMesh(new THREE.CylinderGeometry(1, 1, 10), bodyMaterial);
+
+                //position the wheels
+                wheelRight.position.set(5, -10.5, 0);
+                wheelRight.rotation.z = Math.PI / 2;
+
+                wheelLeft.position.set(-5, -10.5, 0);
+                wheelLeft.rotation.z = Math.PI / 2;
+
+                //position the axle
+                axle.position.set(0, -10.5, 0);
+                axle.rotation.z = Math.PI / 2;
+                
+                // create the ribs
+                for (var i = 0; i < 5; ++i) {
+                    var size = 1.2 * (5 + i);
+                    var ribs = new Physijs.BoxMesh(new THREE.CubeGeometry(size, 1, size), cubeMaterial);
+                    ribs.castShadow = true;
+                    ribs.position.y = 2.7 * i - 7;
+                    //add the body to the scene
+                    body.add(ribs);
+                }
+
+                //add all objects to the body and add them to the scene
+                body.add(axle, wheelRight, wheelLeft, head, ears, antenna, shoulders, armRight, armLeft,
+                        rotorArmL, rotorArmR, rotorRight1, rotorRight2, rotorLeft1, rotorLeft2);
+
+                scene.add(body);
+
+                // add spotlight for the shadows
+                var spotLight = new THREE.SpotLight(0xffffff);
+                spotLight.position.set(0, 0, 105);
+                spotLight.angle = 90;
+                spotLight.castShadow = true;
+                spotLight.target = backWall;
+                scene.add(spotLight);
+
+                // add the output of the renderer to the html element
+                $("#WebGL-output").append(renderer.domElement);
+                
+                //add GUI
+                var controls = new function () {
+                    this.redLight = 'r = red light';
+                    this.blueLight = 'b = blue light';
+                    this.greenLight = 'g = green light';
+                    this.flyMode = 'space = fly mode';
+                    this.moveBackwards = 'w = move backwards';
+                    this.moveForwards = 's = move forwards';
+                    this.moveLeft = 'a = move left';
+                    this.moveRight = 'd = move right'
+                    this.ambientColor = ambientColor;
+                };
+
+                var gui = new dat.GUI();
+                var lightsGUI = gui.addFolder('Light controls');
+                lightsGUI.add(controls, 'redLight');
+                lightsGUI.add(controls, 'blueLight');
+                lightsGUI.add(controls, 'greenLight');
+                lightsGUI.addColor(controls, 'ambientColor').onChange(function (e) {
+                    ambientLight.color = new THREE.Color(e);
+                });
+                var movementGUI = gui.addFolder('Movement controls');
+                movementGUI.add(controls, 'flyMode');
+                movementGUI.add(controls, 'moveBackwards');
+                movementGUI.add(controls, 'moveForwards');
+                movementGUI.add(controls, 'moveLeft');
+                movementGUI.add(controls, 'moveRight');
+
+                // call the render function
+                render();
+
+                function render() {
+                    stats.update();
+                    scene.simulate();
+                    //stabiliza the robot so it doesnt tip over
+                    if (body.rotation.x < 1) {
+                        body.rotation.x = 0;
+                        body.__dirtyRotation = true;
+                    } else if (body.rotation.x > -1) {
+                        body.rotation.x = 0;
+                        body.__dirtyRotation = true;
+                    }
+                    // render using requestAnimationFrame
+                    requestAnimationFrame(render);
+                    renderer.render(scene, camera);
+                }
+
+                var keypress = new window.keypress.Listener();
+
+                keypress.simple_combo("r", function () {
+                    pointlight1.visible = !pointlight1.visible;
+                });
+
+                keypress.simple_combo("b", function () {
+                    pointlight2.visible = !pointlight2.visible;
+                });
+
+                keypress.simple_combo("g", function () {
+                    pointlight3.visible = !pointlight3.visible;
+                });
+
+                keypress.simple_combo("space", function () {
+                    rotorRight1.rotation.y += 1;
+                    rotorRight2.rotation.y += 1;
+                    rotorLeft1.rotation.y += 1;
+                    rotorLeft2.rotation.y += 1;
+                    if (body.position.y < 1) {
+                        body.position.y += 0.5;
+                        body.__dirtyPosition = true;
+                    }
+                });
+
+                keypress.simple_combo("w", function () {
+                    body.position.z -= 0.2;
+                    wheelLeft.rotation.x -= 0.2;
+                    wheelRight.rotation.x -= 0.2;
+                    body.__dirtyPosition = true;
+                });
+
+                keypress.simple_combo("s", function () {
+                    body.position.z += 0.2;
+                    wheelLeft.rotation.x += 0.2;
+                    wheelRight.rotation.x += 0.2;
+                    body.__dirtyPosition = true;
+                });
+
+                keypress.simple_combo("a", function () {
+                    body.position.x -= 0.2;
+                    rotorRight1.rotation.y += 1;
+                    rotorRight2.rotation.y += 1;
+                    rotorLeft1.rotation.y += 1;
+                    rotorLeft2.rotation.y += 1;
+                    body.__dirtyPosition = true;
+                });
+
+                keypress.simple_combo("d", function () {
+                    body.position.x += 0.2;
+                    rotorRight1.rotation.y += 1;
+                    rotorRight2.rotation.y += 1;
+                    rotorLeft1.rotation.y += 1;
+                    rotorLeft2.rotation.y += 1;
+                    body.__dirtyPosition = true;
+                });
+
+                function initStats() {
+
+                    var stats = new Stats();
+
+                    stats.setMode(0); // 0: fps, 1: ms
+
+                    // Align top-left
+                    stats.domElement.style.position = 'absolute';
+                    stats.domElement.style.left = '0px';
+                    stats.domElement.style.top = '0px';
+
+                    $("#Stats-output").append(stats.domElement);
+
+                    return stats;
+                }
+            });
+
+        </script>
+    </body>
+</html>
